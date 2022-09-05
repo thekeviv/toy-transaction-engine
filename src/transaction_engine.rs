@@ -59,6 +59,20 @@ impl TransactionEngine {
         }
     }
 
+    pub fn print_accounts_state(self) -> () {
+        println!("client, available, held, total, locked");
+        for (client_id, client_details) in self.accounts {
+            println!(
+                "{:>6},{:>10.4},{:>5.4},{:>6.4},{:>7}",
+                client_id,
+                client_details.available,
+                client_details.held,
+                client_details.total,
+                client_details.locked
+            );
+        }
+    }
+
     pub fn process_transaction(
         &mut self,
         transaction: TransactionInput,
@@ -304,6 +318,131 @@ impl TransactionEngine {
             }
             None => {
                 return Err(TransactionProcessingError::TransactionNotFound.into());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{TransactionEngine, TransactionProcessingError};
+    use crate::{TransactionInput, TransactionType};
+
+    #[test]
+    fn test_deposit_transaction() {
+        let mut transaction_engine = TransactionEngine::new();
+        let deposit_transaction_1 = TransactionInput {
+            amount: Some(5.0004),
+            client: 1,
+            kind: TransactionType::Deposit,
+            tx: 1,
+        };
+        let result = transaction_engine.process_transaction(deposit_transaction_1);
+        match result {
+            Ok(r) => {
+                assert_eq!(r, ());
+                let created_account = transaction_engine
+                    .accounts
+                    .get(&1)
+                    .expect("An account wasn't found for the client 1");
+                assert_eq!(created_account.available, 5.0004);
+                assert_eq!(created_account.held, 0.0);
+                assert_eq!(created_account.total, 5.0004);
+                assert_eq!(created_account.locked, false);
+            }
+            Err(e) => {
+                panic!(
+                    "The deposit transaction should have succeeded but it failed with error: {}",
+                    e
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_withdraw_transaction() {
+        let mut transaction_engine = TransactionEngine::new();
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: Some(1.0004),
+            client: 1,
+            kind: TransactionType::Withdrawal,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                panic!("The withdraw transaction on account with insufficient balance must fail");
+            }
+            Err(e) => match e {
+                TransactionProcessingError::AccountNotFound => (),
+                _ => {
+                    panic!("Expected the error to be account not found error")
+                }
+            },
+        }
+        let deposit_result = transaction_engine.process_transaction(TransactionInput {
+            amount: Some(5.0004),
+            client: 1,
+            kind: TransactionType::Deposit,
+            tx: 1,
+        });
+        match deposit_result {
+            Ok(_) => {
+                let created_account = transaction_engine
+                    .accounts
+                    .get(&1)
+                    .expect("An account wasn't found for the client 1");
+                assert_eq!(created_account.available, 5.0004);
+                assert_eq!(created_account.held, 0.0);
+                assert_eq!(created_account.total, 5.0004);
+                assert_eq!(created_account.locked, false);
+                let withdraw_result = transaction_engine.process_transaction(TransactionInput {
+                    amount: Some(1.0004),
+                    client: 1,
+                    kind: TransactionType::Withdrawal,
+                    tx: 1,
+                });
+                match withdraw_result {
+                    Ok(_) => {
+                        let updated_account = transaction_engine
+                            .accounts
+                            .get(&1)
+                            .expect("An account wasn't found for the client 1");
+                        assert_eq!(updated_account.available, 4.0);
+                        assert_eq!(updated_account.held, 0.0);
+                        assert_eq!(updated_account.total, 4.0);
+                        assert_eq!(updated_account.locked, false);
+                        let withdraw_result_2 =
+                            transaction_engine.process_transaction(TransactionInput {
+                                amount: Some(6.0),
+                                client: 1,
+                                kind: TransactionType::Withdrawal,
+                                tx: 1,
+                            });
+                        match withdraw_result_2 {
+                            Ok(_) => {
+                                panic!("Expected transaction to fail due to insufficient funds");
+                            }
+                            Err(e) => match e {
+                                TransactionProcessingError::InsufficientFunds => (),
+                                _ => {
+                                    panic!("expected error to be insufficient funds error");
+                                }
+                            },
+                        }
+                    }
+                    Err(e) => {
+                        panic!(
+                            "The withdraw transaction should have succeeded. Error: {}",
+                            e
+                        );
+                    }
+                }
+            }
+            Err(e) => {
+                panic!(
+                    "The deposit transaction should have succeeded but it failed with error: {}",
+                    e
+                );
             }
         }
     }

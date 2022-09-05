@@ -55,6 +55,7 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let mut transaction_engine = transaction_engine::TransactionEngine::new();
     let mut reader = csv::ReaderBuilder::new()
         .trim(csv::Trim::All)
+        .flexible(true)
         .from_path(config.input_path)?;
     for row_result in reader.deserialize() {
         let transaction: TransactionInput = row_result?;
@@ -62,16 +63,6 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             eprintln!("An error occurred when processing a transaction and it was skipped. We'll continue with next transactions. Error: {}", e);
         }
     }
-    println!("client, available, held, total, locked");
-    for (client_id, client_details) in transaction_engine.accounts {
-        println!(
-            "{:>6},{:>10.4},{:>5.4},{:>6.4},{:>7}",
-            client_id,
-            client_details.available,
-            client_details.held,
-            client_details.total,
-            client_details.locked
-        );
-    }
+    transaction_engine.print_accounts_state();
     Ok(())
 }
