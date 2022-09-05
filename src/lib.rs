@@ -35,6 +35,7 @@ pub type ClientId = u16;
 pub type TransactionId = u32;
 pub type Amount = f32;
 
+/// Type for a deserialized transaction input read from the input file
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TransactionInput {
     #[serde(rename = "type")]
@@ -44,6 +45,7 @@ pub struct TransactionInput {
     amount: Option<Amount>,
 }
 
+/// The main method to run the library
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
     let mut transaction_engine = transaction_engine::TransactionEngine::new();
     let mut reader = csv::ReaderBuilder::new()

@@ -5,6 +5,7 @@ use thiserror::Error;
 pub use crate::{Amount, ClientId, TransactionId};
 pub use crate::{TransactionInput, TransactionType};
 
+/// All errors which can happen when processing a transaction
 #[derive(Error, Debug, Clone)]
 pub enum TransactionProcessingError {
     #[error("transaction can't be processed as account is locked")]
@@ -32,6 +33,7 @@ pub enum TransactionProcessingError {
     CannotDisputeAnAlreadyDisputedTransaction,
 }
 
+/// The details stored for every account
 pub struct AccountDetails {
     pub available: Amount,
     pub held: Amount,
@@ -39,6 +41,7 @@ pub struct AccountDetails {
     pub locked: bool,
 }
 
+/// The details stored for every deposit or withdraw transaction
 struct TransactionDetails {
     kind: TransactionType,
     client: ClientId,
@@ -46,8 +49,10 @@ struct TransactionDetails {
     is_disputed: bool,
 }
 
+/// The transaction engine is the main struct providing a method to process a transaction
+/// and print the state of accounts at the end.
 pub struct TransactionEngine {
-    // not putting client inside and using a hashmap as searching which would need to be
+    // not putting client inside a vec and using a hashmap as searching which would need to be
     // done when processing every tx, would be an O(1)
     // operation while in a simple vec, it would take longer
     accounts: HashMap<ClientId, AccountDetails>,
@@ -55,6 +60,7 @@ pub struct TransactionEngine {
 }
 
 impl TransactionEngine {
+    /// Create a new transaction engine instance
     pub fn new() -> TransactionEngine {
         TransactionEngine {
             accounts: HashMap::new(),
@@ -62,6 +68,7 @@ impl TransactionEngine {
         }
     }
 
+    /// prints the state of accounts at the time of calling the method.
     pub fn print_accounts_state(self) -> () {
         println!("client, available, held, total, locked");
         for (client_id, client_details) in self.accounts {
@@ -76,6 +83,8 @@ impl TransactionEngine {
         }
     }
 
+    /// Takes transaction of different kinds, processes it while updating the state of accounts or transactions
+    /// if required.
     pub fn process_transaction(
         &mut self,
         transaction: TransactionInput,
@@ -119,6 +128,7 @@ impl TransactionEngine {
         }
     }
 
+    /// An internal function to process a deposit transaction.
     fn process_deposit_transaction(
         &mut self,
         transaction_id: TransactionId,
@@ -150,6 +160,7 @@ impl TransactionEngine {
         return Ok(());
     }
 
+    /// An internal function to process a withdrawal transaction.
     fn process_withdrawal_transaction(
         &mut self,
         transaction_id: TransactionId,
@@ -184,6 +195,7 @@ impl TransactionEngine {
         }
     }
 
+    /// An internal function to process a dispute transaction.
     fn process_dispute_transaction(
         &mut self,
         transaction_id: TransactionId,
@@ -234,6 +246,7 @@ impl TransactionEngine {
         }
     }
 
+    /// An internal function to process a resolve transaction.
     fn process_resolve_transaction(
         &mut self,
         transaction_id: TransactionId,
@@ -284,6 +297,7 @@ impl TransactionEngine {
         }
     }
 
+    /// An internal function to process a charge back transaction.
     fn process_chargeback_transaction(
         &mut self,
         transaction_id: TransactionId,
