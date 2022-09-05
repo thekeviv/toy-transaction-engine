@@ -1,6 +1,6 @@
 use std::{env, process};
 
-use coding_test::Config;
+use toy_transaction_engine::Config;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -9,7 +9,7 @@ fn main() {
         process::exit(1)
     });
 
-    if let Err(e) = coding_test::run(config) {
+    if let Err(e) = toy_transaction_engine::run(config) {
         eprintln!("An error occurred in the application: {e}");
         process::exit(1);
     }

@@ -1,5 +1,5 @@
 [package]
-name = "coding-test"
+name = "toy-transaction-engine"
 version = "0.1.0"
 edition = "2021"
 authors = ["Vivek Sharma"]
