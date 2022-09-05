@@ -9,22 +9,15 @@ pub struct Config {
 }
 
 impl Config {
-    //TODO:
-    //Change this back later
     pub fn new(args: &[String]) -> Result<Config, &'static str> {
-        return Ok(Config {
-            input_path: "src/tx.csv".to_string(),
-        });
-        // if args.len() < 2 {
-        //     return Err(
-        //         "Required arguments not passed. You must pass the input path as an argument",
-        //     );
-        // }
+        if args.len() < 2 {
+            return Err(
+                "Required arguments not passed. You must pass the input path as an argument",
+            );
+        }
 
-        // let input_path = args[1].clone();
-        // Ok(Config {
-        //     input_path: "tx.csv".to_string(),
-        // })
+        let input_path = args[1].clone();
+        Ok(Config { input_path })
     }
 }
 
