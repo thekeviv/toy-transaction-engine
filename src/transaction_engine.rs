@@ -27,6 +27,9 @@ pub enum TransactionProcessingError {
 
     #[error("cannot resolve a non disputed transaction")]
     CannotResolveNonDisputedTransaction,
+
+    #[error("cannot dispute an already disputed transaction")]
+    CannotDisputeAnAlreadyDisputedTransaction,
 }
 
 pub struct AccountDetails {
@@ -47,7 +50,7 @@ pub struct TransactionEngine {
     // not putting client inside and using a hashmap as searching which would need to be
     // done when processing every tx, would be an O(1)
     // operation while in a simple vec, it would take longer
-    pub accounts: HashMap<ClientId, AccountDetails>,
+    accounts: HashMap<ClientId, AccountDetails>,
     transactions: HashMap<TransactionId, TransactionDetails>,
 }
 
@@ -187,35 +190,44 @@ impl TransactionEngine {
     ) -> Result<(), TransactionProcessingError> {
         let existing_transaction_details = self.transactions.get_mut(&transaction_id);
         match existing_transaction_details {
-            Some(t) => match t.amount {
-                Some(amount) => {
-                    let account_details = self.accounts.get_mut(&t.client);
-                    match account_details {
-                        Some(a) => {
-                            *a = AccountDetails {
-                                available: a.available - amount,
-                                total: a.total,
-                                held: a.held + amount,
-                                locked: a.locked,
-                            };
-
-                            *t = TransactionDetails {
-                                kind: t.kind,
-                                client: t.client,
-                                amount: t.amount,
-                                is_disputed: true,
-                            };
-                            Ok(())
-                        }
-                        None => return Err(TransactionProcessingError::AccountNotFound),
-                    }
-                }
-                None => {
+            Some(t) => {
+                if t.is_disputed {
                     return Err(
-                        TransactionProcessingError::AmountNotFoundOnTransactionToDispute.into(),
+                        TransactionProcessingError::CannotDisputeAnAlreadyDisputedTransaction
+                            .into(),
                     );
                 }
-            },
+
+                match t.amount {
+                    Some(amount) => {
+                        let account_details = self.accounts.get_mut(&t.client);
+                        match account_details {
+                            Some(a) => {
+                                *a = AccountDetails {
+                                    available: a.available - amount,
+                                    total: a.total,
+                                    held: a.held + amount,
+                                    locked: a.locked,
+                                };
+
+                                *t = TransactionDetails {
+                                    kind: t.kind,
+                                    client: t.client,
+                                    amount: t.amount,
+                                    is_disputed: true,
+                                };
+                                Ok(())
+                            }
+                            None => return Err(TransactionProcessingError::AccountNotFound),
+                        }
+                    }
+                    None => {
+                        return Err(
+                            TransactionProcessingError::AmountNotFoundOnTransactionToDispute.into(),
+                        );
+                    }
+                }
+            }
             None => {
                 return Err(TransactionProcessingError::TransactionNotFound.into());
             }
@@ -443,6 +455,239 @@ mod tests {
                     "The deposit transaction should have succeeded but it failed with error: {}",
                     e
                 );
+            }
+        }
+    }
+
+    #[test]
+    fn test_dispute_transaction() {
+        let mut transaction_engine = TransactionEngine::new();
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: None,
+            client: 1,
+            kind: TransactionType::Dispute,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                panic!("Expected dispute to fail for non existing transaction");
+            }
+            Err(e) => match e {
+                TransactionProcessingError::TransactionNotFound => (),
+                _ => {
+                    panic!("Expected error to be a transaction not found error");
+                }
+            },
+        }
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: Some(1.1),
+            client: 1,
+            kind: TransactionType::Deposit,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                let dispute_result = transaction_engine.process_transaction(TransactionInput {
+                    amount: None,
+                    client: 1,
+                    kind: TransactionType::Dispute,
+                    tx: 1,
+                });
+                match dispute_result {
+                    Ok(_) => {
+                        let account_state = transaction_engine
+                            .accounts
+                            .get(&1)
+                            .expect("An account wasn't found for the client 1");
+                        assert_eq!(account_state.available, 0.0);
+                        assert_eq!(account_state.held, 1.1);
+                        assert_eq!(account_state.total, 1.1);
+                        assert_eq!(account_state.locked, false);
+                        let dispute_result_2 =
+                            transaction_engine.process_transaction(TransactionInput {
+                                amount: None,
+                                client: 1,
+                                kind: TransactionType::Dispute,
+                                tx: 1,
+                            });
+                        match dispute_result_2 {
+                            Ok(_) => {
+                                panic!("Expected dispute on already disputed transaction to fail");
+                            }
+                            Err(e) => {
+                                match e {
+                                    TransactionProcessingError::CannotDisputeAnAlreadyDisputedTransaction => (),
+                                    _ => {
+                                        panic!("Expected CannotDisputeAnAlreadyDisputedTransaction error type")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        panic!("Expected dispute transaction to succeed");
+                    }
+                }
+            }
+            Err(_) => {
+                panic!("Expected deposit transaction to succeed");
+            }
+        }
+    }
+
+    #[test]
+    fn test_resolve_transaction() {
+        let mut transaction_engine = TransactionEngine::new();
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: None,
+            client: 1,
+            kind: TransactionType::Resolve,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                panic!("Expected resolve to fail for non existing transaction");
+            }
+            Err(e) => match e {
+                TransactionProcessingError::TransactionNotFound => (),
+                _ => {
+                    panic!("Expected error to be a transaction not found error");
+                }
+            },
+        };
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: Some(1.1),
+            client: 1,
+            kind: TransactionType::Deposit,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                let dispute_result = transaction_engine.process_transaction(TransactionInput {
+                    amount: None,
+                    client: 1,
+                    kind: TransactionType::Dispute,
+                    tx: 1,
+                });
+                match dispute_result {
+                    Ok(_) => {
+                        let account_state = transaction_engine
+                            .accounts
+                            .get(&1)
+                            .expect("An account wasn't found for the client 1");
+                        assert_eq!(account_state.available, 0.0);
+                        assert_eq!(account_state.held, 1.1);
+                        assert_eq!(account_state.total, 1.1);
+                        assert_eq!(account_state.locked, false);
+                        let resolve_result =
+                            transaction_engine.process_transaction(TransactionInput {
+                                kind: TransactionType::Resolve,
+                                client: 1,
+                                tx: 1,
+                                amount: None,
+                            });
+                        match resolve_result {
+                            Ok(_) => {
+                                let account_state = transaction_engine
+                                    .accounts
+                                    .get(&1)
+                                    .expect("An account wasn't found for the client 1");
+                                assert_eq!(account_state.available, 1.1);
+                                assert_eq!(account_state.held, 0.0);
+                                assert_eq!(account_state.total, 1.1);
+                                assert_eq!(account_state.locked, false);
+                            }
+                            Err(_) => {
+                                panic!("Expected resolve to succeed");
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        panic!("Expected dispute transaction to succeed");
+                    }
+                }
+            }
+            Err(_) => {
+                panic!("Expected deposit transaction to succeed");
+            }
+        }
+    }
+
+    #[test]
+    fn test_chargeback_transaction() {
+        let mut transaction_engine = TransactionEngine::new();
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: None,
+            client: 1,
+            kind: TransactionType::Resolve,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                panic!("Expected resolve to fail for non existing transaction");
+            }
+            Err(e) => match e {
+                TransactionProcessingError::TransactionNotFound => (),
+                _ => {
+                    panic!("Expected error to be a transaction not found error");
+                }
+            },
+        };
+        let result = transaction_engine.process_transaction(TransactionInput {
+            amount: Some(1.1),
+            client: 1,
+            kind: TransactionType::Deposit,
+            tx: 1,
+        });
+        match result {
+            Ok(_) => {
+                let dispute_result = transaction_engine.process_transaction(TransactionInput {
+                    amount: None,
+                    client: 1,
+                    kind: TransactionType::Dispute,
+                    tx: 1,
+                });
+                match dispute_result {
+                    Ok(_) => {
+                        let account_state = transaction_engine
+                            .accounts
+                            .get(&1)
+                            .expect("An account wasn't found for the client 1");
+                        assert_eq!(account_state.available, 0.0);
+                        assert_eq!(account_state.held, 1.1);
+                        assert_eq!(account_state.total, 1.1);
+                        assert_eq!(account_state.locked, false);
+
+                        let chargeback_result =
+                            transaction_engine.process_transaction(TransactionInput {
+                                kind: TransactionType::Chargeback,
+                                client: 1,
+                                tx: 1,
+                                amount: None,
+                            });
+                        match chargeback_result {
+                            Ok(_) => {
+                                let account_state = transaction_engine
+                                    .accounts
+                                    .get(&1)
+                                    .expect("An account wasn't found for the client 1");
+                                assert_eq!(account_state.available, 0.0);
+                                assert_eq!(account_state.held, 0.0);
+                                assert_eq!(account_state.total, 0.0);
+                                assert_eq!(account_state.locked, true);
+                            }
+                            Err(_) => {
+                                panic!("Expected chargeback to succeed");
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        panic!("Expected dispute transaction to succeed");
+                    }
+                }
+            }
+            Err(_) => {
+                panic!("Expected deposit transaction to succeed");
             }
         }
     }
