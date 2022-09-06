@@ -13,7 +13,8 @@ I am currently logging error messages to stderr. So they will show up in a conso
 1. It is assumed that clients with different client ids are allowed to interact with accounts which weren't created by them directly.
 2. It is assumed that only deposit and withdraw transactions can be disputed, resolved or charged back.
 3. It is assumed that a transaction which has already been disputed is not allowed to be disputed again.
-4. It is assumed that spacing and ordering in rows doesn't matter.
+4. It is assumed that once an account is locked, transactions are no longer allowed on it.
+5. It is assumed that spacing and ordering in rows doesn't matter.
 
 ## Design Decisions
 
