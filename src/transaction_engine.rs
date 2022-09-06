@@ -180,7 +180,7 @@ impl TransactionEngine {
                     self.transactions.insert(
                         transaction_id,
                         TransactionDetails {
-                            kind: TransactionType::Deposit,
+                            kind: TransactionType::Withdrawal,
                             client: client_id,
                             amount: Some(amount),
                             is_disputed: false,
